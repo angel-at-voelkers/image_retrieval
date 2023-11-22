@@ -1,0 +1,21 @@
+[tool.poetry]
+name = "image-retrieval"
+version = "0.1.0"
+description = ""
+authors = ["Florian Salihovic <florian.salihovic@engelvoelkers.com>"]
+readme = "README.md"
+packages = [{include = "image_retrieval", from = "src"}]
+
+[tool.poetry.dependencies]
+python = "^3.11.5"
+requests = "^2.31.0"
+
+[tool.poetry.group.dev.dependencies]
+black = "^23.11.0"
+
+[tool.poetry.scripts]
+image-retrieval = "image_retrieval.main:main"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
