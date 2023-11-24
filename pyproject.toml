@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "image-retrieval"
-version = "0.1.0"
+version = "0.2.0"
 description = ""
 authors = ["Florian Salihovic <florian.salihovic@engelvoelkers.com>"]
 readme = "README.md"
