@@ -1,5 +1,6 @@
 import argparse
 import sys
+import uuid
 from collections import defaultdict
 import re
 from urllib import parse
@@ -124,7 +125,7 @@ def parse_xml(xml_file: str):
 pattern = re.compile(r"^https://[a-zA-Z0-9]+\.ucr\.io(?:/.*)?$")
 
 
-def fetch_image(config: Config, manifest_entry: str, image_url: str):
+def fetch_image(config: Config, run_id: str, manifest_entry: str, image_url: str):
     headers = utils.default_headers()
     response = requests.get(image_url, headers=headers)
     results[response.status_code].append(image_url)
@@ -141,13 +142,10 @@ def fetch_image(config: Config, manifest_entry: str, image_url: str):
         "url": image_url,
         "status_code": response.status_code,
         "headers": dict(response.headers),
+        "run_id": run_id,
     }
     if image_url.startswith(config.vercel_host):
-        entry["width"] = [
-            param
-            for param in image_url.split("?")[1].split("&")
-            if param.startswith("w=")
-        ][0][2:]
+        entry["width"] = get_width(image_url)
 
     collection.insert_one(entry)
 
@@ -158,6 +156,12 @@ def fetch_image(config: Config, manifest_entry: str, image_url: str):
             f"{color_fail}✘ ({response.status_code}){color_end} {image_url}",
             file=sys.stderr,
         )
+
+
+def get_width(image_url):
+    return [
+        param for param in image_url.split("?")[1].split("&") if param.startswith("w=")
+    ][0][2:]
 
 
 def main():
@@ -175,15 +179,33 @@ def main():
     else:
         print(f"{color_fail}No images found{color_end}", file=sys.stderr)
         sys.exit(1)
-
+    run_id = str(uuid.uuid4())
     for image in [ImageSet(config, image) for image in images if image != ""]:
         if config.fetch_lh:
-            fetch_image(config, image.manifest_entry, image.bucket_url)
+            fetch_image(config, run_id, image.manifest_entry, image.bucket_url)
         if config.fetch_uc:
-            fetch_image(config, image.manifest_entry, image.uploadcare_url)
+            fetch_image(config, run_id, image.manifest_entry, image.uploadcare_url)
         if config.fetch_vercel_image_service:
             for url in image.vercel_renditions:
-                fetch_image(config, image.manifest_entry, url)
+                fetch_image(config, run_id, image.manifest_entry, url)
+
+    pipeline = [
+        {"$match": {"status_code": 502}},
+        {
+            "$group": {
+                "_id": "$manifest_entry",
+                "total": {"$sum": 1},
+                "urls": {"$addToSet": "$url"},
+                "widths": {"$addToSet": "$width"},
+            }
+        },
+    ]
+    for entry in get_collection(mongo_client, "vercel_image_service").aggregate(
+        pipeline
+    ):
+        print(f"{color_warn}✘ ({entry['total']}){color_end} {entry['_id']}")
+        for url in entry["urls"]:
+            print(f" (w={get_width(url)}) {url}")
 
     sys.exit(0)
 
